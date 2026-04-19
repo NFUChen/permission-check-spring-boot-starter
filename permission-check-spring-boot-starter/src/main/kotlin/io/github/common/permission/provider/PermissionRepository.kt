@@ -10,17 +10,15 @@ import java.util.*
 interface PermissionRepository {
     /**
      * Get all permissions for a user.
-     * The permission strings should follow a consistent format but the format
-     * is entirely up to the implementing application.
+     * The permission strings should follow the "domain:action" format.
      *
-     * Common patterns include:
-     * - "resource:action" (e.g., "orders:read", "users:create")
-     * - "domain:action" (e.g., "billing:view", "admin:manage")
-     * - Hierarchical "domain:subdomain:action" (e.g., "system:users:create")
-     * - Wildcard support "*:read", "admin:*", "*:*"
+     * Examples:
+     * - "orders:read", "users:create"
+     * - "billing:view", "admin:manage"
+     * - Wildcard support: "*:read", "admin:*", "*:*"
      *
      * @param userId User identifier
-     * @return Set of permission strings (format determined by application)
+     * @return Set of permission strings in "domain:action" format
      */
     fun getUserPermissions(userId: UUID): Set<String>
 

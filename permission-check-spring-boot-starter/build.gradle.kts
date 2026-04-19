@@ -36,7 +36,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-autoconfigure")
     implementation("org.springframework:spring-context")
 
-    // Spring Security (optional for defaults, but required for DefaultCurrentUserProvider/DefaultPermissionRepository)
+    // Spring Security (optional for defaults, but required for DefaultPrincipalIdExtractor/DefaultPermissionRepository)
     compileOnly("org.springframework.security:spring-security-core")
 
     // Kotlin support

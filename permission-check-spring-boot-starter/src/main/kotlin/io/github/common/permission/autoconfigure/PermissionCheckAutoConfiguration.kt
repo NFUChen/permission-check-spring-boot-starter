@@ -6,7 +6,7 @@ import org.springframework.context.annotation.Import
 
 /**
  * Auto-configuration that activates when AspectJ is available.
- * Provides sensible defaults for CurrentUserProvider and PermissionRepository,
+ * Provides sensible defaults for PrincipalIdExtractor and PermissionRepository,
  * but allows applications to override with custom implementations.
  */
 @AutoConfiguration

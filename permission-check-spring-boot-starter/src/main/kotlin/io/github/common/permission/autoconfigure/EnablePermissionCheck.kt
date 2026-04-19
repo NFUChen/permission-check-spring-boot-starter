@@ -9,8 +9,8 @@ import org.springframework.context.annotation.Import
  * to automatically configure the permission checking system.
  *
  * Requirements:
- * - Implement CurrentUserProvider interface to provide user context
- * - Implement PermissionRepository interface to provide permission data
+ * - Your UserDetails principal should implement PrincipalIdentity interface
+ * - Implement PermissionRepository interface OR have principals implement PermissionAware
  * - Use @Require annotation on methods that need permission checking
  *
  * Example:

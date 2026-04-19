@@ -1,8 +1,8 @@
 package io.github.common.permission.autoconfigure
 
 import io.github.common.permission.aop.PermissionAspect
-import io.github.common.permission.provider.CurrentUserProvider
-import io.github.common.permission.provider.DefaultCurrentUserProvider
+import io.github.common.permission.provider.PrincipalIdExtractor
+import io.github.common.permission.provider.DefaultPrincipalIdExtractor
 import io.github.common.permission.provider.DefaultPermissionRepository
 import io.github.common.permission.provider.PermissionRepository
 import io.github.common.permission.service.CachedPermissionService
@@ -55,10 +55,10 @@ class PermissionCheckConfiguration {
     @ConditionalOnMissingBean
     fun permissionAspect(
         evaluator: PermissionEvaluator,
-        userProvider: CurrentUserProvider,
+        principalIdExtractor: PrincipalIdExtractor,
         properties: PermissionCheckProperties
     ): PermissionAspect {
-        return PermissionAspect(evaluator, userProvider, properties.logging)
+        return PermissionAspect(evaluator, principalIdExtractor, properties.logging)
     }
 
     /**
@@ -76,15 +76,15 @@ class PermissionCheckConfiguration {
     }
 
     /**
-     * Provide default CurrentUserProvider if none is implemented by the application.
-     * This covers 80% of common use cases with Spring Security.
+     * Provide default PrincipalIdExtractor if none is implemented by the application.
+     * Requires principals to implement PrincipalIdentity interface.
      * Only available when Spring Security is on the classpath.
      */
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnClass(name = ["org.springframework.security.core.context.SecurityContextHolder"])
-    fun defaultCurrentUserProvider(): CurrentUserProvider {
-        return DefaultCurrentUserProvider()
+    fun defaultPrincipalIdExtractor(): PrincipalIdExtractor {
+        return DefaultPrincipalIdExtractor()
     }
 
     /**

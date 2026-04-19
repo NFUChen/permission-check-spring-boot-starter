@@ -4,7 +4,7 @@ import io.github.common.permission.annotation.Require
 import io.github.common.permission.annotation.extractPermissions
 import io.github.common.permission.autoconfigure.PermissionCheckProperties
 import io.github.common.permission.exception.PermissionDeniedException
-import io.github.common.permission.provider.CurrentUserProvider
+import io.github.common.permission.provider.PrincipalIdExtractor
 import io.github.common.permission.service.PermissionEvaluator
 import org.aspectj.lang.ProceedingJoinPoint
 import org.aspectj.lang.annotation.Around
@@ -16,12 +16,12 @@ import java.util.*
 /**
  * AOP Aspect for intercepting methods annotated with @Require.
  * This aspect is completely domain-agnostic and works with any user model
- * through the CurrentUserProvider interface.
+ * through the PrincipalIdExtractor interface.
  */
 @Aspect
 class PermissionAspect(
     private val permissionEvaluator: PermissionEvaluator,
-    private val userProvider: CurrentUserProvider,
+    private val principalIdExtractor: PrincipalIdExtractor,
     private val loggingProperties: PermissionCheckProperties.LoggingProperties
 ) {
     private val logger = LoggerFactory.getLogger(PermissionAspect::class.java)
@@ -34,7 +34,7 @@ class PermissionAspect(
         val methodName = (joinPoint.signature as MethodSignature).method.name
         val className = joinPoint.target.javaClass.simpleName
 
-        val currentUserId = userProvider.getCurrentUserId()
+        val currentUserId = principalIdExtractor.extractPrincipalId()
 
         if (loggingProperties.debugEnabled) {
             logger.debug("Permission check initiated for user=$currentUserId method=$className.$methodName")
