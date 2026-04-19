@@ -6,10 +6,71 @@ A domain-agnostic Spring Boot starter for annotation-based permission checking w
 
 ### 1. Add Dependency
 
+#### Gradle (Kotlin DSL)
+
+Add JitPack repository in `settings.gradle.kts`:
+
+```kotlin
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        mavenCentral()
+        maven { url = uri("https://jitpack.io") }
+    }
+}
+```
+
+Add dependency in `build.gradle.kts`:
+
 ```kotlin
 dependencies {
-    implementation("io.github.common:permission-check-spring-boot-starter:1.0.0-SNAPSHOT")
+    implementation("com.github.NFUChen:permission-check-spring-boot-starter:-SNAPSHOT")
 }
+```
+
+#### Gradle (Groovy DSL)
+
+Add JitPack repository in `settings.gradle`:
+
+```groovy
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        mavenCentral()
+        maven { url 'https://jitpack.io' }
+    }
+}
+```
+
+Add dependency in `build.gradle`:
+
+```groovy
+dependencies {
+    implementation 'com.github.NFUChen:permission-check-spring-boot-starter:-SNAPSHOT'
+}
+```
+
+#### Maven
+
+Add JitPack repository in `pom.xml`:
+
+```xml
+<repositories>
+    <repository>
+        <id>jitpack.io</id>
+        <url>https://jitpack.io</url>
+    </repository>
+</repositories>
+```
+
+Add dependency:
+
+```xml
+<dependency>
+    <groupId>com.github.NFUChen</groupId>
+    <artifactId>permission-check-spring-boot-starter</artifactId>
+    <version>-SNAPSHOT</version>
+</dependency>
 ```
 
 ### 2. Enable Permission Checking
