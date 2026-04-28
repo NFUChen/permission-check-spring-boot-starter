@@ -2,6 +2,7 @@ package io.github.common.permission.service
 
 import io.github.common.permission.annotation.Require
 import io.github.common.permission.annotation.extractPermissions
+import org.springframework.aop.support.AopUtils
 import org.springframework.beans.factory.SmartInitializingSingleton
 import org.springframework.context.ApplicationContext
 import java.util.Collections
@@ -18,18 +19,10 @@ import java.util.Collections
  */
 class PermissionRegistry(
     private val applicationContext: ApplicationContext
-) : SmartInitializingSingleton {
+) {
 
-    private val _permissions = mutableSetOf<String>()
-
-    /**
-     * All unique permission strings found in @Require annotations across the application.
-     * Populated after all singletons are instantiated.
-     */
-    val definedPermissions: Set<String>
-        get() = Collections.unmodifiableSet(_permissions)
-
-    override fun afterSingletonsInstantiated() {
+    fun getAllPermissions(): Set<String> {
+        val permissions = mutableSetOf<String>()
         for (beanName in applicationContext.beanDefinitionNames) {
             applicationContext.getType(beanName) ?: continue
             val bean = try {
@@ -38,10 +31,12 @@ class PermissionRegistry(
                 continue
             }
 
-            for (method in bean.javaClass.methods) {
+            val targetClass = AopUtils.getTargetClass(bean)
+            for (method in targetClass.methods) {
                 val require = method.getAnnotation(Require::class.java) ?: continue
-                _permissions.addAll(require.extractPermissions())
+                permissions.addAll(require.extractPermissions())
             }
         }
+        return permissions
     }
 }
