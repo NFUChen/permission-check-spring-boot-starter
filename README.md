@@ -400,3 +400,5 @@ Method Call → @Require → PermissionAspect
 - **Auditable**: Comprehensive logging for security compliance
 - **Wildcard Support**: Powerful pattern matching for role-based access
 - **Type-Safe**: UUID-based principal identification, no string parsing magic
+
+
