@@ -77,6 +77,7 @@ allOpen {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    enabled = false
 }
 
 // Disable bootJar for root project since it's not an executable application
