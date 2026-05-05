@@ -3,9 +3,7 @@ package io.github.common.permission.service
 import io.github.common.permission.annotation.Require
 import io.github.common.permission.annotation.extractPermissions
 import org.springframework.aop.support.AopUtils
-import org.springframework.beans.factory.SmartInitializingSingleton
 import org.springframework.context.ApplicationContext
-import java.util.Collections
 
 /**
  * Collects all permissions defined via @Require annotations across all Spring beans at startup.
@@ -32,9 +30,11 @@ class PermissionRegistry(
             }
 
             val targetClass = AopUtils.getTargetClass(bean)
-            for (method in targetClass.methods) {
-                val require = method.getAnnotation(Require::class.java) ?: continue
-                permissions.addAll(require.extractPermissions())
+            for (cls in listOf(targetClass) + targetClass.interfaces) {
+                for (method in cls.methods) {
+                    val require = method.getAnnotation(Require::class.java) ?: continue
+                    permissions.addAll(require.extractPermissions())
+                }
             }
         }
         return permissions
