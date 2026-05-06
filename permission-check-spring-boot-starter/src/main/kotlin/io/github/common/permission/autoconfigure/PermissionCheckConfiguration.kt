@@ -2,15 +2,12 @@ package io.github.common.permission.autoconfigure
 
 import io.github.common.permission.aop.PermissionAspect
 import io.github.common.permission.provider.PrincipalIdExtractor
-import io.github.common.permission.provider.DefaultPrincipalIdExtractor
-import io.github.common.permission.provider.DefaultPermissionRepository
 import io.github.common.permission.provider.PermissionRepository
 import io.github.common.permission.service.CachedPermissionService
 import io.github.common.permission.service.DefaultPermissionEvaluator
 import io.github.common.permission.service.PermissionEvaluator
 import io.github.common.permission.service.PermissionRegistry
 import io.github.common.permission.service.PermissionService
-import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.cache.CacheManager
@@ -19,6 +16,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.ApplicationContext
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.EnableAspectJAutoProxy
+import org.springframework.context.annotation.Import
 
 /**
  * Auto-configuration for permission checking system.
@@ -27,6 +25,7 @@ import org.springframework.context.annotation.EnableAspectJAutoProxy
 @Configuration
 @EnableAspectJAutoProxy
 @EnableConfigurationProperties(PermissionCheckProperties::class)
+@Import(SpringSecurityPermissionConfiguration::class)
 class PermissionCheckConfiguration {
 
     /**
@@ -87,27 +86,4 @@ class PermissionCheckConfiguration {
         return PermissionRegistry(applicationContext)
     }
 
-    /**
-     * Provide default PrincipalIdExtractor if none is implemented by the application.
-     * Requires principals to implement PrincipalIdentity interface.
-     * Only available when Spring Security is on the classpath.
-     */
-    @Bean
-    @ConditionalOnMissingBean
-    @ConditionalOnClass(name = ["org.springframework.security.core.context.SecurityContextHolder"])
-    fun defaultPrincipalIdExtractor(): PrincipalIdExtractor {
-        return DefaultPrincipalIdExtractor()
-    }
-
-    /**
-     * Provide default PermissionRepository if none is implemented by the application.
-     * This converts Spring Security roles to permissions using common patterns.
-     * Only available when Spring Security is on the classpath.
-     */
-    @Bean
-    @ConditionalOnMissingBean
-    @ConditionalOnClass(name = ["org.springframework.security.core.GrantedAuthority"])
-    fun defaultPermissionRepository(): PermissionRepository {
-        return DefaultPermissionRepository()
-    }
 }
