@@ -4,16 +4,21 @@ import org.slf4j.LoggerFactory
 import java.util.*
 
 /**
- * Default implementation of PermissionEvaluator with support for wildcard matching.
+ * Default implementation of PermissionEvaluator with support for wildcard and self-scope matching.
  *
- * Supported permission patterns:
+ * Supported permission patterns (full access):
  * - Direct match: "orders:read" matches "orders:read"
  * - Domain wildcards: "orders:*" matches "orders:read", "orders:create", etc.
  * - Action wildcards: "*:read" matches "orders:read", "users:read", etc.
  * - System-wide: "*:*" matches everything (typically admin-only)
  *
- * Permission format is expected to be "domain:action" but the evaluator
- * is flexible and can work with any consistent string format.
+ * Self-scope patterns (ownership check required):
+ * - Direct self: "orders:read:self" — user can only read their own orders
+ * - Domain wildcard self: "orders:*:self" — user can do anything on their own orders
+ * - Action wildcard self: "*:read:self" — user can read their own resources across all domains
+ *
+ * Full permissions ("domain:action") are a superset of self-scoped permissions ("domain:action:self").
+ * If a user holds both, the full permission takes precedence and no ownership check is needed.
  */
 class DefaultPermissionEvaluator(
     private val permissionService: PermissionService
@@ -21,59 +26,66 @@ class DefaultPermissionEvaluator(
 
     private val logger = LoggerFactory.getLogger(DefaultPermissionEvaluator::class.java)
 
-    override fun hasPermission(userId: UUID, permission: String): Boolean {
-        logger.debug("Evaluating permission '$permission' for user: $userId")
+    override fun evaluatePermission(userId: UUID, permission: String): PermissionResult {
+        logger.debug("Evaluating permission '{}' for user: {}", permission, userId)
 
         val userPermissions = permissionService.getUserPermissions(userId)
-        val hasPermission = matchesPermission(userPermissions, permission)
+        val result = matchesPermission(userPermissions, permission)
 
-        if (!hasPermission) {
-            logger.debug("Permission '$permission' denied for user: $userId - Available permissions: $userPermissions")
+        if (result == PermissionResult.DENIED) {
+            logger.debug("Permission '{}' denied for user: {} - Available: {}", permission, userId, userPermissions)
         } else {
-            logger.debug("Permission '$permission' granted for user: $userId")
+            logger.debug("Permission '{}' {} for user: {}", permission, result, userId)
         }
 
-        return hasPermission
+        return result
     }
 
-    /**
-     * Check if user permissions match required permission.
-     * Supports wildcard matching for flexible permission schemes.
-     */
-    private fun matchesPermission(userPermissions: Set<String>, requiredPermission: String): Boolean {
+    private fun matchesPermission(userPermissions: Set<String>, requiredPermission: String): PermissionResult {
         // System-wide permissions (admin access)
         if (userPermissions.contains("*:*")) {
-            return true
+            return PermissionResult.GRANTED
         }
 
-        // Direct match
-        if (userPermissions.contains(requiredPermission)) {
-            return true
-        }
-
-        // Parse permission for wildcard matching
-        // Expected format: "domain:action", but gracefully handle other formats
+        // Parse required permission — expected format: "domain:action"
         val parts = requiredPermission.split(":", limit = 2)
         if (parts.size != 2) {
-            // If permission format doesn't match expected pattern, only direct match works
-            return false
+            return PermissionResult.DENIED
         }
 
         val domain = parts[0]
         val action = parts[1]
 
-        // Wildcard domain matching: "domain:*" matches "domain:action"
-        val wildcardActionPermission = "$domain:*"
-        if (userPermissions.contains(wildcardActionPermission)) {
-            return true
+        // Check full (non-self) permissions first — full permission is a superset of self
+        if (hasFullPermission(userPermissions, domain, action)) {
+            return PermissionResult.GRANTED
         }
 
-        // Wildcard action matching: "*:action" matches "domain:action"
-        val wildcardDomainPermission = "*:$action"
-        if (userPermissions.contains(wildcardDomainPermission)) {
-            return true
+        // Check self-scoped permissions
+        if (hasSelfPermission(userPermissions, domain, action)) {
+            return PermissionResult.GRANTED_SELF_ONLY
         }
 
+        return PermissionResult.DENIED
+    }
+
+    private fun hasFullPermission(userPermissions: Set<String>, domain: String, action: String): Boolean {
+        // Direct match
+        if (userPermissions.contains("$domain:$action")) return true
+        // Domain wildcard: "domain:*"
+        if (userPermissions.contains("$domain:*")) return true
+        // Action wildcard: "*:action"
+        if (userPermissions.contains("*:$action")) return true
+        return false
+    }
+
+    private fun hasSelfPermission(userPermissions: Set<String>, domain: String, action: String): Boolean {
+        // Direct self match: "domain:action:self"
+        if (userPermissions.contains("$domain:$action:self")) return true
+        // Domain wildcard self: "domain:*:self"
+        if (userPermissions.contains("$domain:*:self")) return true
+        // Action wildcard self: "*:action:self"
+        if (userPermissions.contains("*:$action:self")) return true
         return false
     }
 }

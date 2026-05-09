@@ -1,11 +1,14 @@
 package io.github.common.permission.aop
 
 import io.github.common.permission.annotation.Require
+import io.github.common.permission.annotation.ResourceOwner
 import io.github.common.permission.annotation.extractPermissions
 import io.github.common.permission.autoconfigure.PermissionCheckProperties
 import io.github.common.permission.exception.PermissionDeniedException
+import io.github.common.permission.provider.OwnedResource
 import io.github.common.permission.provider.PrincipalIdExtractor
 import io.github.common.permission.service.PermissionEvaluator
+import io.github.common.permission.service.PermissionResult
 import org.aspectj.lang.ProceedingJoinPoint
 import org.aspectj.lang.annotation.Around
 import org.aspectj.lang.annotation.Aspect
@@ -15,8 +18,11 @@ import java.util.*
 
 /**
  * AOP Aspect for intercepting methods annotated with @Require.
- * This aspect is completely domain-agnostic and works with any user model
- * through the PrincipalIdExtractor interface.
+ *
+ * Supports both full permissions ("domain:action") and self-scoped permissions
+ * ("domain:action:self"). When the evaluator returns GRANTED_SELF_ONLY, the aspect
+ * looks for a @ResourceOwner-annotated parameter to verify that the current user
+ * owns the resource being accessed.
  */
 @Aspect
 class PermissionAspect(
@@ -31,90 +37,149 @@ class PermissionAspect(
         joinPoint: ProceedingJoinPoint,
         require: Require
     ): Any? {
-        val methodName = (joinPoint.signature as MethodSignature).method.name
+        val method = (joinPoint.signature as MethodSignature).method
+        val methodName = method.name
         val className = joinPoint.target.javaClass.simpleName
-
         val currentUserId = principalIdExtractor.extractPrincipalId()
 
         if (loggingProperties.debugEnabled) {
-            logger.debug("Permission check initiated for user=$currentUserId method=$className.$methodName")
+            logger.debug("Permission check initiated for user={} method={}.{}", currentUserId, className, methodName)
         }
 
-        validatePermissions(currentUserId, require, methodName)
+        validatePermissions(currentUserId, require, method, joinPoint)
 
         if (loggingProperties.debugEnabled) {
-            logger.debug("Permission granted for user=$currentUserId method=$className.$methodName")
+            logger.debug("Permission granted for user={} method={}.{}", currentUserId, className, methodName)
         }
 
         return joinPoint.proceed()
     }
 
-    private fun validatePermissions(userId: UUID, require: Require, methodName: String) {
-        val hasPermission = checkPermissions(userId, require)
-        if (hasPermission) {
-            return
-        }
-
-        val permissionsInfo = getPermissionsContext(require)
-
-        if (loggingProperties.auditEnabled) {
-            logger.warn("Permission denied for user=$userId method=$methodName. Required: $permissionsInfo")
-        }
-
-        throw PermissionDeniedException(
-            userId = userId,
-            requiredPermissions = permissionsInfo,
-            methodName = methodName
-        )
-    }
-
-    /**
-     * Check user permissions against the @Require annotation.
-     * Supports both single and multiple permission checking with AND/OR logic.
-     */
-    private fun checkPermissions(userId: UUID, require: Require): Boolean {
+    private fun validatePermissions(
+        userId: UUID,
+        require: Require,
+        method: java.lang.reflect.Method,
+        joinPoint: ProceedingJoinPoint
+    ) {
         val permissionsToCheck = require.extractPermissions()
 
-        return when (require.requireAll) {
-            true -> {
-                // AND logic - requires all permissions
-                for (permission in permissionsToCheck) {
-                    if (!permissionEvaluator.hasPermission(userId, permission)) {
-                        return false
-                    }
-                }
-                true
+        val results = permissionsToCheck.map { permission ->
+            permission to permissionEvaluator.evaluatePermission(userId, permission)
+        }
+
+        val passed = when (require.requireAll) {
+            true -> checkAllPermissions(results, userId, method, joinPoint)
+            false -> checkAnyPermission(results, userId, method, joinPoint)
+        }
+
+        if (!passed) {
+            val permissionsInfo = getPermissionsContext(require)
+            if (loggingProperties.auditEnabled) {
+                logger.warn("Permission denied for user={} method={}. Required: {}", userId, method.name, permissionsInfo)
             }
-            false -> {
-                // OR logic - any permission is sufficient
-                for (permission in permissionsToCheck) {
-                    if (permissionEvaluator.hasPermission(userId, permission)) {
-                        return true
-                    }
-                }
-                false
-            }
+            throw PermissionDeniedException(
+                userId = userId,
+                requiredPermissions = permissionsInfo,
+                methodName = method.name
+            )
         }
     }
 
     /**
-     * Get permission information string for logging and error messages.
+     * AND logic: all permissions must be granted. If any returns SELF_ONLY,
+     * ownership must match for that permission.
      */
+    private fun checkAllPermissions(
+        results: List<Pair<String, PermissionResult>>,
+        userId: UUID,
+        method: java.lang.reflect.Method,
+        joinPoint: ProceedingJoinPoint
+    ): Boolean {
+        for ((_, result) in results) {
+            when (result) {
+                PermissionResult.DENIED -> return false
+                PermissionResult.GRANTED -> continue
+                PermissionResult.GRANTED_SELF_ONLY -> {
+                    if (!verifyOwnership(userId, method, joinPoint)) return false
+                }
+            }
+        }
+        return true
+    }
+
+    /**
+     * OR logic: any permission being granted is sufficient. SELF_ONLY
+     * counts as granted only if ownership matches.
+     */
+    private fun checkAnyPermission(
+        results: List<Pair<String, PermissionResult>>,
+        userId: UUID,
+        method: java.lang.reflect.Method,
+        joinPoint: ProceedingJoinPoint
+    ): Boolean {
+        for ((_, result) in results) {
+            when (result) {
+                PermissionResult.GRANTED -> return true
+                PermissionResult.GRANTED_SELF_ONLY -> {
+                    if (verifyOwnership(userId, method, joinPoint)) return true
+                }
+                PermissionResult.DENIED -> continue
+            }
+        }
+        return false
+    }
+
+    /**
+     * Extract owner ID from the @ResourceOwner-annotated parameter and compare with userId.
+     * Returns false if no @ResourceOwner parameter is found (cannot verify ownership).
+     */
+    private fun verifyOwnership(
+        userId: UUID,
+        method: java.lang.reflect.Method,
+        joinPoint: ProceedingJoinPoint
+    ): Boolean {
+        val ownerId = extractResourceOwnerId(method, joinPoint.args)
+        if (ownerId == null) {
+            logger.debug("No @ResourceOwner parameter found on method={}, denying self-scope access", method.name)
+            return false
+        }
+        return ownerId == userId
+    }
+
+    /**
+     * Find the parameter annotated with @ResourceOwner and extract the owner UUID.
+     * Supports UUID parameters directly and OwnedResource implementations.
+     */
+    private fun extractResourceOwnerId(method: java.lang.reflect.Method, args: Array<Any>): UUID? {
+        val paramAnnotations = method.parameterAnnotations
+        for (i in paramAnnotations.indices) {
+            val hasResourceOwner = paramAnnotations[i].any { it is ResourceOwner }
+            if (!hasResourceOwner) continue
+
+            val arg = args[i]
+            return when (arg) {
+                is UUID -> arg
+                is OwnedResource -> arg.getOwnerId()
+                else -> {
+                    logger.warn(
+                        "@ResourceOwner parameter type {} is not UUID or OwnedResource on method={}",
+                        arg.javaClass.simpleName, method.name
+                    )
+                    null
+                }
+            }
+        }
+        return null
+    }
+
     private fun getPermissionsContext(require: Require): String {
         val permissionsToCheck = require.extractPermissions()
-
         return when {
             permissionsToCheck.size > 1 -> {
-                val operator = require.getOperatorString()
+                val operator = if (require.requireAll) "AND" else "OR"
                 permissionsToCheck.joinToString(" $operator ")
             }
             else -> permissionsToCheck.first()
         }
     }
-
-    private fun Require.getOperatorString(): String =
-        when (requireAll) {
-            true -> "AND"
-            false -> "OR"
-        }
 }
